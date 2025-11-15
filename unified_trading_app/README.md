@@ -16,6 +16,11 @@ Komplette Trading Risk Management Lösung - vereint alle Tools in einer Anwendun
   - Status-Tracking (planned/open/closed)
   - Filterung & Suche
   - Portfolio-Metriken
+- ✅ **PartialSaleManager** - Teilverkauf-Management
+  - Teilverkauf-Berechnung (25%, 50%, 75%, 100%)
+  - R-Multiple pro Verkauf
+  - Auto Stop-Update bei Gewinn
+  - Analytics über alle Teilverkäufe
 
 ### Phase 2: Basic UI (✅ Komplett)
 - ✅ **Tab 1: Trade Calculator**
@@ -29,7 +34,29 @@ Komplette Trading Risk Management Lösung - vereint alle Tools in einer Anwendun
   - Live P&L Berechnung
   - R-Multiple Tracking
   - Stop-Loss Management
-  - Position schließen
+  - **Teilverkauf-Buttons (25%, 50%, 75%, 100%)**
+  - **Teilverkauf-Historie Anzeige**
+  - **Auto Stop auf Break-even**
+
+### Phase 3: Teilverkäufe (✅ Komplett)
+- ✅ **Tab 3: Teilverkäufe Analytics**
+  - Overview Metriken (Total Verkäufe, Erlös, P&L)
+  - R-Multiple Verteilung
+  - Performance nach Verkaufs-Prozent
+  - Detail-Tabelle aller Teilverkäufe
+
+### Phase 4: Performance & Historie (✅ Komplett)
+- ✅ **Tab 4: Performance Dashboard**
+  - Geschlossene Trades Overview
+  - Win Rate & Avg R-Multiple
+  - Performance nach Produkt-Typ
+  - R-Multiple Verteilung (Chart)
+  - Best & Worst Trades (Top/Bottom 3)
+- ✅ **Tab 5: Trade-Historie**
+  - Alle Trades in Tabellenform
+  - Filter nach Status (planned/open/closed)
+  - Filter nach Produkt-Typ
+  - Vollständige Trade-Details
 
 ## 🚀 Installation
 
@@ -107,14 +134,15 @@ python3 unified_trading_app/tests/test_phase1.py
 ## 🎯 Roadmap
 
 ### ✅ Completed
-- [x] Phase 1: Core Classes
+- [x] Phase 1: Core Classes (UnifiedPositionCalculator, TradeManager, PartialSaleManager)
 - [x] Phase 2: Basic UI (Tab 1 & 2)
+- [x] Phase 3: Teilverkäufe (Tab 2 erweitert + Tab 3)
+- [x] Phase 4: Performance & Historie (Tab 4 & 5)
 
-### 🔜 Next Steps
-- [ ] Phase 3: Teilverkäufe (Tab 2 erweitert + Tab 3)
-- [ ] Phase 4: Analytics & Performance (Tab 4 & 5)
-- [ ] Phase 5: Export & Settings (Tab 6)
-- [ ] Phase 6: Testing & Documentation
+### 🔜 Optional Next Steps
+- [ ] Phase 5: Export & Settings (CSV/JSON, Backup/Restore)
+- [ ] Phase 6: Charts mit Plotly (Performance-Visualisierung)
+- [ ] Advanced Features: Auto-Trailing Stop, Notifications
 
 ## 💡 Highlights
 

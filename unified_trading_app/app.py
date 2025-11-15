@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-🎯 Unified Trading App
+🎯 Unified Trading App - Phase 3 & 4 Complete
 Komplette Trading Risk Management Lösung
 
 Features:
 - Alle Produkt-Typen (Spot, CFD, Knockout)
 - Long/Short Support
-- Trade-Management
+- Trade-Management mit Teilverkäufen
 - Portfolio-Tracking
 - Performance-Analytics
 """
 
 import streamlit as st
+import pandas as pd
 import sys
 from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core import UnifiedPositionCalculator, TradeManager
+from core import UnifiedPositionCalculator, TradeManager, PartialSaleManager
 from utils.formatters import (
     format_currency, format_percentage, format_r_multiple,
     get_product_badge, get_product_label, get_status_badge,
@@ -117,21 +118,24 @@ if metrics['total_exposure'] > 0:
 # ============================================================================
 
 st.title("🎯 Unified Trading Risk Management")
-st.markdown("**Alle Produkt-Typen • Trade-Management • Performance-Analytics**")
+st.markdown("**Alle Produkt-Typen • Teilverkäufe • Performance-Analytics**")
 
 
 # ============================================================================
 # TAB SYSTEM
 # ============================================================================
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🎯 Trade Calculator",
-    "📊 Offene Positionen"
+    "📊 Offene Positionen",
+    "💰 Teilverkäufe",
+    "📈 Performance",
+    "📋 Historie"
 ])
 
 
 # ============================================================================
-# TAB 1: TRADE CALCULATOR
+# TAB 1: TRADE CALCULATOR (unchanged from Phase 2)
 # ============================================================================
 
 with tab1:
@@ -166,7 +170,6 @@ with tab1:
             )
 
         with col_stop:
-            # Default Stop basierend auf Produkt-Typ
             default_stop = 115.0 if product_type not in ["cfd_short", "knockout_short"] else 125.0
             stop_loss = st.number_input(
                 "Stop-Loss (€)",
@@ -176,7 +179,7 @@ with tab1:
                 format="%.2f"
             )
 
-        # Hebel-Einstellungen (nur für Hebelprodukte)
+        # Hebel-Einstellungen
         if product_type != "spot":
             st.markdown("### 🔧 Hebel-Einstellungen")
 
@@ -256,11 +259,11 @@ with tab1:
             col_b.metric("Investment", format_currency(result.actual_investment))
             col_c.metric("Depot %", format_percentage(result.portfolio_percentage))
 
-            # Exposure (bei Hebel)
+            # Exposure
             if result.product_type != "spot":
                 st.info(f"💼 **Exposure:** {format_currency(result.notional_value)} (Hebel {result.leverage}x)")
 
-            # Kosten-Breakdown (bei Hebel)
+            # Kosten-Breakdown
             if result.product_type != "spot":
                 st.markdown("### 💰 Kosten-Breakdown")
                 cost_data = {
@@ -315,7 +318,8 @@ with tab1:
                         holding_days=holding_days,
                         status="planned"
                     )
-                    st.success(f"✅ Trade gespeichert (ID: {trade_id[:8]}...)")
+                    st.success(f"✅ Trade gespeichert!")
+                    st.rerun()
 
             with col_s2:
                 if st.button("🚀 Als offen markieren", use_container_width=True, type="primary"):
@@ -339,14 +343,14 @@ with tab1:
                             status="open"
                         )
                         st.session_state.cash_available -= result.actual_investment
-                        st.success(f"✅ Position eröffnet! (Cash: {format_currency(st.session_state.cash_available)})")
+                        st.success(f"✅ Position eröffnet!")
                         st.rerun()
                     else:
-                        st.error(f"❌ Nicht genug Cash! (Benötigt: {format_currency(result.actual_investment)}, Verfügbar: {format_currency(cash_available)})")
+                        st.error(f"❌ Nicht genug Cash!")
 
 
 # ============================================================================
-# TAB 2: OFFENE POSITIONEN
+# TAB 2: OFFENE POSITIONEN (mit Teilverkäufen)
 # ============================================================================
 
 with tab2:
@@ -373,7 +377,8 @@ with tab2:
                 with col_info2:
                     st.markdown("**Einheiten**")
                     st.write(f"{trade.units:,}")
-                    st.caption(f"Original: {trade.original_units:,}")
+                    if trade.units != trade.original_units:
+                        st.caption(f"Original: {trade.original_units:,}")
 
                 with col_info3:
                     st.markdown("**Investment**")
@@ -384,7 +389,8 @@ with tab2:
                 with col_info4:
                     st.markdown("**Risiko**")
                     st.write(format_currency(trade.risk_amount))
-                    st.caption(f"{risk_percentage}% Depot")
+                    if trade.total_realized_pnl != 0:
+                        st.caption(f"Realized: {format_currency(trade.total_realized_pnl)}")
 
                 # Preis-Info
                 col_price1, col_price2, col_price3 = st.columns(3)
@@ -398,7 +404,6 @@ with tab2:
                     st.write(format_currency(trade.current_stop))
 
                 with col_price3:
-                    # Aktueller Preis Input
                     current_price = st.number_input(
                         "Aktueller Preis",
                         min_value=0.01,
@@ -416,14 +421,8 @@ with tab2:
                 # Live Metriken
                 col_met1, col_met2, col_met3 = st.columns(3)
 
-                pnl_color = "normal"
-                if current_pnl > 0:
-                    pnl_color = "inverse"
-                elif current_pnl < 0:
-                    pnl_color = "off"
-
                 with col_met1:
-                    st.metric("Aktueller P&L", format_currency(current_pnl), delta=format_percentage((current_pnl/trade.investment)*100) if trade.investment > 0 else "0%")
+                    st.metric("Unrealized P&L", format_currency(current_pnl))
 
                 with col_met2:
                     st.metric("R-Multiple", format_r_multiple(current_r))
@@ -432,60 +431,288 @@ with tab2:
                     total_pnl = trade.total_realized_pnl + current_pnl
                     st.metric("Total P&L", format_currency(total_pnl))
 
-                # R-Targets Fortschritt
-                st.markdown("**🎯 Target Fortschritt**")
-                progress_text = f"Entry: {format_currency(trade.entry_price)} → Aktuell: {format_currency(current_price)}"
+                # Teilverkauf-Buttons
+                st.markdown("### 💰 Teilverkäufe")
+                col_ps1, col_ps2, col_ps3, col_ps4 = st.columns(4)
 
-                if not is_short:
-                    if current_price >= trade.target_5r:
-                        st.success(f"✅ 5R Target erreicht! {progress_text}")
-                    elif current_price >= trade.target_2r:
-                        st.success(f"✅ 2R Target erreicht! {progress_text}")
-                    elif current_price >= trade.target_1r:
-                        st.info(f"✅ 1R Target erreicht! {progress_text}")
-                    else:
-                        st.warning(f"⏳ Noch kein Target erreicht. {progress_text}")
-                else:
-                    if current_price <= trade.target_5r:
-                        st.success(f"✅ 5R Target erreicht! {progress_text}")
-                    elif current_price <= trade.target_2r:
-                        st.success(f"✅ 2R Target erreicht! {progress_text}")
-                    elif current_price <= trade.target_1r:
-                        st.info(f"✅ 1R Target erreicht! {progress_text}")
-                    else:
-                        st.warning(f"⏳ Noch kein Target erreicht. {progress_text}")
+                with col_ps1:
+                    if st.button("25% verkaufen", key=f"sell25_{trade.id}", use_container_width=True):
+                        sale_details = PartialSaleManager.execute_partial_sale(
+                            manager, trade.id, 25.0, current_price, auto_update_stop=True
+                        )
+                        st.session_state.cash_available += sale_details['sale_proceeds']
+                        st.success(f"✅ 25% verkauft! P&L: {format_currency(sale_details['pnl'])}")
+                        st.rerun()
 
-                # Aktionen
+                with col_ps2:
+                    if st.button("50% verkaufen", key=f"sell50_{trade.id}", use_container_width=True):
+                        sale_details = PartialSaleManager.execute_partial_sale(
+                            manager, trade.id, 50.0, current_price, auto_update_stop=True
+                        )
+                        st.session_state.cash_available += sale_details['sale_proceeds']
+                        st.success(f"✅ 50% verkauft!")
+                        st.rerun()
+
+                with col_ps3:
+                    if st.button("75% verkaufen", key=f"sell75_{trade.id}", use_container_width=True):
+                        sale_details = PartialSaleManager.execute_partial_sale(
+                            manager, trade.id, 75.0, current_price, auto_update_stop=True
+                        )
+                        st.session_state.cash_available += sale_details['sale_proceeds']
+                        st.success(f"✅ 75% verkauft!")
+                        st.rerun()
+
+                with col_ps4:
+                    if st.button("🔴 100% schließen", key=f"sell100_{trade.id}", use_container_width=True, type="primary"):
+                        sale_details = PartialSaleManager.execute_partial_sale(
+                            manager, trade.id, 100.0, current_price, auto_update_stop=False
+                        )
+                        st.session_state.cash_available += sale_details['sale_proceeds']
+                        st.success(f"✅ Position geschlossen! Total P&L: {format_currency(trade.total_realized_pnl)}")
+                        st.rerun()
+
+                # Teilverkauf-Historie
+                if trade.partial_sales:
+                    st.markdown("**Teilverkauf-Historie:**")
+                    sales_df = pd.DataFrame(trade.partial_sales)
+                    sales_df['pnl'] = sales_df['pnl'].apply(lambda x: format_currency(x))
+                    sales_df['price'] = sales_df['price'].apply(lambda x: format_currency(x))
+                    sales_df['r_multiple'] = sales_df['r_multiple'].apply(lambda x: format_r_multiple(x))
+                    st.dataframe(sales_df, use_container_width=True, hide_index=True)
+
+                # Weitere Aktionen
                 st.markdown("---")
-                col_act1, col_act2, col_act3, col_act4 = st.columns(4)
+                col_act1, col_act2 = st.columns(2)
 
                 with col_act1:
                     if st.button("Stop zu Break-even", key=f"breakeven_{trade.id}", use_container_width=True):
                         manager.update_trade(trade.id, {'current_stop': trade.entry_price})
-                        st.success("✅ Stop auf Break-even gesetzt!")
+                        st.success("✅ Stop auf Break-even!")
                         st.rerun()
 
                 with col_act2:
                     new_stop = st.number_input("Neuer Stop", min_value=0.01, value=trade.current_stop, step=0.01, key=f"new_stop_{trade.id}")
                     if st.button("Stop updaten", key=f"update_stop_{trade.id}", use_container_width=True):
                         manager.update_trade(trade.id, {'current_stop': new_stop})
-                        st.success(f"✅ Stop updated auf {format_currency(new_stop)}")
+                        st.success(f"✅ Stop updated!")
                         st.rerun()
 
-                with col_act3:
-                    if st.button("🔴 Position schließen", key=f"close_{trade.id}", use_container_width=True, type="primary"):
-                        manager.close_trade(trade.id, close_price=current_price)
-                        st.session_state.cash_available += trade.investment + current_pnl
-                        st.success(f"✅ Position geschlossen! P&L: {format_currency(current_pnl)}")
-                        st.rerun()
 
-                with col_act4:
-                    if st.button("🗑️ Löschen", key=f"delete_{trade.id}", use_container_width=True):
-                        if st.button("⚠️ Wirklich löschen?", key=f"confirm_delete_{trade.id}"):
-                            manager.delete_trade(trade.id)
-                            st.session_state.cash_available += trade.investment  # Cash zurück
-                            st.warning("⚠️ Trade gelöscht")
-                            st.rerun()
+# ============================================================================
+# TAB 3: TEILVERKÄUFE ANALYTICS
+# ============================================================================
+
+with tab3:
+    st.header("💰 Teilverkäufe Analytics")
+
+    all_trades = manager.get_all_trades()
+    analytics = PartialSaleManager.analyze_partial_sales(all_trades)
+
+    if analytics['total_partial_sales'] == 0:
+        st.info("📭 Noch keine Teilverkäufe durchgeführt")
+    else:
+        # Overview Metriken
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
+        col_m1.metric("Total Teilverkäufe", analytics['total_partial_sales'])
+        col_m2.metric("Total Erlös", format_currency(analytics['total_proceeds']))
+        col_m3.metric("Total P&L", format_currency(analytics['total_pnl']))
+        col_m4.metric("Avg R-Multiple", format_r_multiple(analytics['avg_r_multiple']))
+
+        # R-Distribution
+        st.markdown("### 📊 R-Multiple Verteilung")
+        r_dist_df = pd.DataFrame([
+            {"Range": k, "Anzahl": v}
+            for k, v in analytics['r_distribution'].items()
+        ])
+        st.bar_chart(r_dist_df.set_index("Range"))
+
+        # By Percentage
+        st.markdown("### 📈 Performance nach Verkaufs-Prozent")
+        if analytics['by_percentage']:
+            pct_data = []
+            for pct, data in analytics['by_percentage'].items():
+                pct_data.append({
+                    "Prozent": f"{pct}%",
+                    "Anzahl": data['count'],
+                    "Total P&L": format_currency(data['total_pnl']),
+                    "Avg R": format_r_multiple(data['avg_r'])
+                })
+            pct_df = pd.DataFrame(pct_data)
+            st.dataframe(pct_df, use_container_width=True, hide_index=True)
+
+        # Detail-Tabelle
+        st.markdown("### 📋 Alle Teilverkäufe")
+        if analytics['all_sales']:
+            sales_detail_df = pd.DataFrame(analytics['all_sales'])
+            sales_detail_df = sales_detail_df[['date', 'symbol', 'product_type', 'percentage', 'units_sold', 'price', 'pnl', 'r_multiple']]
+            sales_detail_df['pnl'] = sales_detail_df['pnl'].apply(lambda x: format_currency(x))
+            sales_detail_df['price'] = sales_detail_df['price'].apply(lambda x: format_currency(x))
+            sales_detail_df['r_multiple'] = sales_detail_df['r_multiple'].apply(lambda x: format_r_multiple(x))
+            sales_detail_df['percentage'] = sales_detail_df['percentage'].apply(lambda x: f"{x}%")
+            st.dataframe(sales_detail_df, use_container_width=True, hide_index=True)
+
+
+# ============================================================================
+# TAB 4: PERFORMANCE DASHBOARD
+# ============================================================================
+
+with tab4:
+    st.header("📈 Performance Dashboard")
+
+    closed_trades = manager.get_closed_trades()
+    open_trades = manager.get_open_trades()
+
+    if not closed_trades:
+        st.info("📭 Noch keine geschlossenen Trades")
+    else:
+        # Overview Metriken
+        total_pnl = sum(t.final_pnl or 0 for t in closed_trades)
+        winning_trades = [t for t in closed_trades if (t.final_pnl or 0) > 0]
+        win_rate = (len(winning_trades) / len(closed_trades)) * 100 if closed_trades else 0
+        avg_r = sum(t.final_r_multiple or 0 for t in closed_trades) / len(closed_trades) if closed_trades else 0
+
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+
+        col_p1.metric("Geschlossene Trades", len(closed_trades))
+        col_p2.metric("Total P&L", format_currency(total_pnl))
+        col_p3.metric("Win Rate", format_percentage(win_rate))
+        col_p4.metric("Avg R-Multiple", format_r_multiple(avg_r))
+
+        # Performance nach Produkt-Typ
+        st.markdown("### 📊 Performance nach Produkt-Typ")
+
+        product_performance = {}
+        for trade in closed_trades:
+            ptype = trade.product_type
+            if ptype not in product_performance:
+                product_performance[ptype] = {
+                    'count': 0,
+                    'total_pnl': 0,
+                    'wins': 0,
+                    'avg_r': []
+                }
+
+            product_performance[ptype]['count'] += 1
+            product_performance[ptype]['total_pnl'] += (trade.final_pnl or 0)
+            if (trade.final_pnl or 0) > 0:
+                product_performance[ptype]['wins'] += 1
+            if trade.final_r_multiple is not None:
+                product_performance[ptype]['avg_r'].append(trade.final_r_multiple)
+
+        if product_performance:
+            perf_data = []
+            for ptype, data in product_performance.items():
+                win_rate_ptype = (data['wins'] / data['count']) * 100 if data['count'] > 0 else 0
+                avg_r_ptype = sum(data['avg_r']) / len(data['avg_r']) if data['avg_r'] else 0
+
+                perf_data.append({
+                    "Produkt": f"{get_product_badge(ptype)} {get_product_label(ptype)}",
+                    "Trades": data['count'],
+                    "Win Rate": format_percentage(win_rate_ptype),
+                    "Total P&L": format_currency(data['total_pnl']),
+                    "Avg R": format_r_multiple(avg_r_ptype)
+                })
+
+            perf_df = pd.DataFrame(perf_data)
+            st.dataframe(perf_df, use_container_width=True, hide_index=True)
+
+        # R-Multiple Distribution
+        st.markdown("### 📊 R-Multiple Verteilung")
+        r_multiples = [t.final_r_multiple for t in closed_trades if t.final_r_multiple is not None]
+
+        if r_multiples:
+            r_dist = {
+                "< 0R": len([r for r in r_multiples if r < 0]),
+                "0-1R": len([r for r in r_multiples if 0 <= r < 1]),
+                "1-2R": len([r for r in r_multiples if 1 <= r < 2]),
+                "2-5R": len([r for r in r_multiples if 2 <= r < 5]),
+                "> 5R": len([r for r in r_multiples if r >= 5])
+            }
+
+            r_dist_df = pd.DataFrame([
+                {"Range": k, "Anzahl": v}
+                for k, v in r_dist.items()
+            ])
+            st.bar_chart(r_dist_df.set_index("Range"))
+
+        # Best/Worst Trades
+        st.markdown("### 🏆 Best & Worst Trades")
+
+        col_best, col_worst = st.columns(2)
+
+        with col_best:
+            st.markdown("**🥇 Best Trades (Top 3)**")
+            best_trades = sorted(closed_trades, key=lambda t: t.final_pnl or 0, reverse=True)[:3]
+            for i, trade in enumerate(best_trades, 1):
+                st.write(f"{i}. {trade.symbol}: {format_currency(trade.final_pnl or 0)} ({format_r_multiple(trade.final_r_multiple or 0)})")
+
+        with col_worst:
+            st.markdown("**💔 Worst Trades (Bottom 3)**")
+            worst_trades = sorted(closed_trades, key=lambda t: t.final_pnl or 0)[:3]
+            for i, trade in enumerate(worst_trades, 1):
+                st.write(f"{i}. {trade.symbol}: {format_currency(trade.final_pnl or 0)} ({format_r_multiple(trade.final_r_multiple or 0)})")
+
+
+# ============================================================================
+# TAB 5: TRADE-HISTORIE
+# ============================================================================
+
+with tab5:
+    st.header("📋 Trade-Historie")
+
+    all_trades = manager.get_all_trades()
+
+    if not all_trades:
+        st.info("📭 Noch keine Trades vorhanden")
+    else:
+        # Filter
+        col_f1, col_f2 = st.columns(2)
+
+        with col_f1:
+            status_filter = st.multiselect(
+                "Status Filter",
+                options=["planned", "open", "closed"],
+                default=["planned", "open", "closed"],
+                format_func=lambda x: f"{get_status_badge(x)} {x.title()}"
+            )
+
+        with col_f2:
+            product_filter = st.multiselect(
+                "Produkt Filter",
+                options=["spot", "cfd_long", "cfd_short", "knockout_long", "knockout_short"],
+                default=["spot", "cfd_long", "cfd_short", "knockout_long", "knockout_short"],
+                format_func=lambda x: f"{get_product_badge(x)} {get_product_label(x)}"
+            )
+
+        # Filtern
+        filtered_trades = [
+            t for t in all_trades
+            if t.status in status_filter and t.product_type in product_filter
+        ]
+
+        st.write(f"**{len(filtered_trades)} Trade(s) gefunden**")
+
+        if filtered_trades:
+            # Trade-Tabelle
+            trades_data = []
+            for trade in filtered_trades:
+                trades_data.append({
+                    "Status": f"{get_status_badge(trade.status)} {trade.status}",
+                    "Symbol": f"{get_product_badge(trade.product_type)} {trade.symbol}",
+                    "Entry": format_currency(trade.entry_price),
+                    "Stop": format_currency(trade.current_stop),
+                    "Units": f"{trade.units:,}",
+                    "Investment": format_currency(trade.investment),
+                    "R-Amount": format_currency(trade.risk_amount),
+                    "Close Price": format_currency(trade.close_price) if trade.close_price else "-",
+                    "P&L": format_currency(trade.final_pnl) if trade.final_pnl is not None else "-",
+                    "R-Multiple": format_r_multiple(trade.final_r_multiple) if trade.final_r_multiple is not None else "-",
+                    "Date": trade.created_at
+                })
+
+            trades_df = pd.DataFrame(trades_data)
+            st.dataframe(trades_df, use_container_width=True, hide_index=True)
 
 
 # ============================================================================
@@ -493,4 +720,4 @@ with tab2:
 # ============================================================================
 
 st.markdown("---")
-st.markdown("*🎯 Unified Trading Risk Management v1.0 - Phase 2*")
+st.markdown("*🎯 Unified Trading Risk Management v1.0 - Phase 3 & 4 Complete*")
