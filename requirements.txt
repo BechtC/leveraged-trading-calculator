@@ -1,0 +1,27 @@
+# Requirements und Installation
+
+## Python Version
+- Python 3.7 oder höher erforderlich
+
+## Erforderliche Pakete
+Das Tool nutzt nur Standard-Python-Bibliotheken:
+- Keine externen Dependencies nötig!
+
+## Installation
+1. Tool herunterladen/klonen
+2. Python ausführen: `python position_size_calculator.py`
+
+## Für Entwicklung (optional)
+```bash
+pip install pytest          # Für Unit Tests
+pip install matplotlib       # Für zukünftige Visualisierungen
+pip install pandas          # Für CSV-Verarbeitung
+pip install tkinter         # Für GUI (meist vorinstalliert)
+```
+
+## Test-Ausführung
+```bash
+python position_size_calculator.py
+```
+
+Sollte Beispiel-Berechnungen für NVIDIA und Uranium Energy ausgeben.
