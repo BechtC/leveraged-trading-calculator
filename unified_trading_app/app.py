@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🎯 Unified Trading App - Phase 3 & 4 Complete
+🎯 Unified Trading App - Complete (Phase 1-6)
 Komplette Trading Risk Management Lösung
 
 Features:
@@ -9,12 +9,16 @@ Features:
 - Trade-Management mit Teilverkäufen
 - Portfolio-Tracking
 - Performance-Analytics
+- Export & Backup
 """
 
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -25,6 +29,7 @@ from utils.formatters import (
     get_product_badge, get_product_label, get_status_badge,
     calculate_pnl, calculate_current_r_multiple
 )
+from utils.export import DataExporter
 
 
 # ============================================================================
@@ -125,12 +130,13 @@ st.markdown("**Alle Produkt-Typen • Teilverkäufe • Performance-Analytics**"
 # TAB SYSTEM
 # ============================================================================
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🎯 Trade Calculator",
     "📊 Offene Positionen",
     "💰 Teilverkäufe",
     "📈 Performance",
-    "📋 Historie"
+    "📋 Historie",
+    "⚙️ Settings"
 ])
 
 
@@ -519,13 +525,23 @@ with tab3:
         col_m3.metric("Total P&L", format_currency(analytics['total_pnl']))
         col_m4.metric("Avg R-Multiple", format_r_multiple(analytics['avg_r_multiple']))
 
-        # R-Distribution
+        # R-Distribution mit Plotly
         st.markdown("### 📊 R-Multiple Verteilung")
         r_dist_df = pd.DataFrame([
             {"Range": k, "Anzahl": v}
             for k, v in analytics['r_distribution'].items()
         ])
-        st.bar_chart(r_dist_df.set_index("Range"))
+
+        fig_r_dist = px.bar(
+            r_dist_df,
+            x="Range",
+            y="Anzahl",
+            title="R-Multiple Verteilung der Teilverkäufe",
+            color="Anzahl",
+            color_continuous_scale="Blues"
+        )
+        fig_r_dist.update_layout(height=400)
+        st.plotly_chart(fig_r_dist, use_container_width=True)
 
         # By Percentage
         st.markdown("### 📈 Performance nach Verkaufs-Prozent")
@@ -617,7 +633,7 @@ with tab4:
             perf_df = pd.DataFrame(perf_data)
             st.dataframe(perf_df, use_container_width=True, hide_index=True)
 
-        # R-Multiple Distribution
+        # R-Multiple Distribution mit Plotly
         st.markdown("### 📊 R-Multiple Verteilung")
         r_multiples = [t.final_r_multiple for t in closed_trades if t.final_r_multiple is not None]
 
@@ -634,7 +650,105 @@ with tab4:
                 {"Range": k, "Anzahl": v}
                 for k, v in r_dist.items()
             ])
-            st.bar_chart(r_dist_df.set_index("Range"))
+
+            fig_r_perf = px.bar(
+                r_dist_df,
+                x="Range",
+                y="Anzahl",
+                title="R-Multiple Verteilung geschlossener Trades",
+                color="Anzahl",
+                color_continuous_scale="Greens"
+            )
+            fig_r_perf.update_layout(height=400)
+            st.plotly_chart(fig_r_perf, use_container_width=True)
+
+        # Additional Charts
+        st.markdown("### 📊 Zusätzliche Analytics")
+
+        col_chart1, col_chart2 = st.columns(2)
+
+        with col_chart1:
+            # Product Distribution Pie Chart
+            product_counts = {}
+            for trade in closed_trades:
+                ptype = get_product_label(trade.product_type)
+                product_counts[ptype] = product_counts.get(ptype, 0) + 1
+
+            fig_pie = px.pie(
+                values=list(product_counts.values()),
+                names=list(product_counts.keys()),
+                title="Trades nach Produkt-Typ"
+            )
+            fig_pie.update_layout(height=350)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col_chart2:
+            # Win Rate Gauge Chart
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=win_rate,
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Win Rate"},
+                delta={'reference': 50},
+                gauge={
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': "darkgreen" if win_rate >= 50 else "darkred"},
+                    'steps': [
+                        {'range': [0, 33], 'color': "lightgray"},
+                        {'range': [33, 66], 'color': "gray"},
+                        {'range': [66, 100], 'color': "lightgreen"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 50
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=350)
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        # Cumulative P&L Line Chart
+        st.markdown("### 📈 Kumulative P&L Entwicklung")
+
+        # Sort trades by close date
+        sorted_trades = sorted(
+            [t for t in closed_trades if t.close_date],
+            key=lambda t: t.close_date
+        )
+
+        if sorted_trades:
+            cumulative_pnl = []
+            cumsum = 0
+            dates = []
+
+            for trade in sorted_trades:
+                cumsum += (trade.final_pnl or 0)
+                cumulative_pnl.append(cumsum)
+                dates.append(trade.close_date)
+
+            fig_cumulative = go.Figure()
+
+            fig_cumulative.add_trace(go.Scatter(
+                x=dates,
+                y=cumulative_pnl,
+                mode='lines+markers',
+                name='Kumulative P&L',
+                line=dict(color='royalblue', width=3),
+                marker=dict(size=8),
+                fill='tozeroy',
+                fillcolor='rgba(65, 105, 225, 0.1)'
+            ))
+
+            fig_cumulative.update_layout(
+                title="Kumulative P&L über Zeit",
+                xaxis_title="Datum",
+                yaxis_title="P&L (€)",
+                hovermode='x unified',
+                height=400
+            )
+
+            st.plotly_chart(fig_cumulative, use_container_width=True)
 
         # Best/Worst Trades
         st.markdown("### 🏆 Best & Worst Trades")
@@ -716,8 +830,237 @@ with tab5:
 
 
 # ============================================================================
+# TAB 6: SETTINGS & EXPORT
+# ============================================================================
+
+with tab6:
+    st.header("⚙️ Settings & Export")
+
+    # ========================================================================
+    # EXPORT SECTION
+    # ========================================================================
+
+    st.subheader("📤 Export")
+
+    col_e1, col_e2, col_e3 = st.columns(3)
+
+    with col_e1:
+        st.markdown("**📊 CSV Export**")
+        st.markdown("*Exportiere Trade-History als CSV*")
+
+        if st.button("📥 Export All Trades (CSV)", use_container_width=True):
+            all_trades = manager.get_all_trades()
+            if all_trades:
+                csv_data = DataExporter.export_trades_to_csv(all_trades)
+                st.download_button(
+                    label="💾 Download CSV",
+                    data=csv_data,
+                    file_name=f"trades_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                st.success(f"✅ {len(all_trades)} Trades exportiert")
+            else:
+                st.warning("⚠️ Keine Trades zum Exportieren")
+
+        # Performance CSV
+        if st.button("📥 Export Performance (CSV)", use_container_width=True):
+            closed_trades = [t for t in manager.get_all_trades() if t.status == "closed"]
+            if closed_trades:
+                csv_data = DataExporter.export_performance_to_csv(closed_trades)
+                st.download_button(
+                    label="💾 Download Performance CSV",
+                    data=csv_data,
+                    file_name=f"performance_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                st.success(f"✅ {len(closed_trades)} geschlossene Trades exportiert")
+            else:
+                st.warning("⚠️ Keine geschlossenen Trades")
+
+    with col_e2:
+        st.markdown("**💾 JSON Backup**")
+        st.markdown("*Vollständiges Backup (inkl. Teilverkäufe)*")
+
+        if st.button("📥 Create Backup (JSON)", use_container_width=True):
+            json_data = DataExporter.export_trades_to_json(manager)
+            st.download_button(
+                label="💾 Download Backup",
+                data=json_data,
+                file_name=f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+            st.success("✅ Backup erstellt")
+
+    with col_e3:
+        st.markdown("**💰 Teilverkäufe CSV**")
+        st.markdown("*Exportiere alle Teilverkäufe*")
+
+        if st.button("📥 Export Partial Sales (CSV)", use_container_width=True):
+            analytics_data = PartialSaleManager.analyze_partial_sales(manager.get_all_trades())
+            if analytics_data['total_partial_sales'] > 0:
+                csv_data = DataExporter.export_partial_sales_to_csv(analytics_data)
+                st.download_button(
+                    label="💾 Download Partial Sales CSV",
+                    data=csv_data,
+                    file_name=f"partial_sales_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                st.success(f"✅ {analytics_data['total_partial_sales']} Teilverkäufe exportiert")
+            else:
+                st.warning("⚠️ Keine Teilverkäufe vorhanden")
+
+    st.markdown("---")
+
+    # ========================================================================
+    # IMPORT SECTION
+    # ========================================================================
+
+    st.subheader("📥 Import & Restore")
+
+    st.warning("⚠️ **Achtung**: Import überschreibt alle bestehenden Trades!")
+
+    uploaded_file = st.file_uploader(
+        "JSON Backup hochladen",
+        type=['json'],
+        help="Lade ein JSON Backup hoch um deine Trades wiederherzustellen"
+    )
+
+    if uploaded_file is not None:
+        col_i1, col_i2 = st.columns([3, 1])
+
+        with col_i1:
+            st.info(f"📁 Datei: {uploaded_file.name} ({uploaded_file.size} bytes)")
+
+        with col_i2:
+            if st.button("🔄 Restore", type="primary", use_container_width=True):
+                try:
+                    json_string = uploaded_file.read().decode('utf-8')
+                    success = DataExporter.import_trades_from_json(manager, json_string)
+
+                    if success:
+                        st.success("✅ Backup erfolgreich wiederhergestellt!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Import fehlgeschlagen - ungültiges Format")
+                except Exception as e:
+                    st.error(f"❌ Fehler beim Import: {str(e)}")
+
+    st.markdown("---")
+
+    # ========================================================================
+    # DATA MANAGEMENT
+    # ========================================================================
+
+    st.subheader("🗑️ Daten-Verwaltung")
+
+    col_d1, col_d2, col_d3 = st.columns(3)
+
+    with col_d1:
+        st.metric("Total Trades", len(manager.get_all_trades()))
+
+    with col_d2:
+        planned = len([t for t in manager.get_all_trades() if t.status == "planned"])
+        st.metric("Geplante Trades", planned)
+
+    with col_d3:
+        open_trades = len([t for t in manager.get_all_trades() if t.status == "open"])
+        st.metric("Offene Trades", open_trades)
+
+    st.markdown("---")
+
+    # Danger Zone
+    st.markdown("### ⚠️ Danger Zone")
+
+    col_danger1, col_danger2 = st.columns([3, 1])
+
+    with col_danger1:
+        st.warning("**Alle Trades löschen** - Diese Aktion kann nicht rückgängig gemacht werden!")
+
+    with col_danger2:
+        if st.button("🗑️ Clear All Data", type="secondary", use_container_width=True):
+            # Confirm dialog
+            if 'confirm_clear' not in st.session_state:
+                st.session_state.confirm_clear = False
+
+            st.session_state.confirm_clear = True
+
+    if st.session_state.get('confirm_clear', False):
+        st.error("🚨 **Bist du sicher?** Diese Aktion löscht ALLE Trades unwiderruflich!")
+
+        col_confirm1, col_confirm2, col_confirm3 = st.columns([1, 1, 1])
+
+        with col_confirm1:
+            if st.button("❌ Abbrechen", use_container_width=True):
+                st.session_state.confirm_clear = False
+                st.rerun()
+
+        with col_confirm2:
+            pass  # Spacer
+
+        with col_confirm3:
+            if st.button("✅ JA, ALLES LÖSCHEN", type="primary", use_container_width=True):
+                # Clear all trades
+                st.session_state.trade_manager = TradeManager()
+                st.session_state.confirm_clear = False
+                st.success("✅ Alle Daten gelöscht")
+                st.rerun()
+
+    st.markdown("---")
+
+    # ========================================================================
+    # PORTFOLIO SETTINGS
+    # ========================================================================
+
+    st.subheader("💼 Portfolio Settings")
+
+    st.info("💡 Diese Einstellungen sind für zukünftige Features geplant (Auto-Berechnung, Alerts, etc.)")
+
+    col_s1, col_s2 = st.columns(2)
+
+    with col_s1:
+        portfolio_value = st.number_input(
+            "Portfolio Value (€)",
+            min_value=1000.0,
+            value=st.session_state.get('portfolio_value', 50000.0),
+            step=1000.0,
+            help="Dein Gesamt-Portfolio Wert"
+        )
+        st.session_state.portfolio_value = portfolio_value
+
+    with col_s2:
+        risk_percentage = st.number_input(
+            "Risk per Trade (%)",
+            min_value=0.1,
+            max_value=5.0,
+            value=st.session_state.get('risk_percentage', 1.0),
+            step=0.1,
+            help="Max Risiko pro Trade in % vom Portfolio"
+        )
+        st.session_state.risk_percentage = risk_percentage
+
+    st.markdown("---")
+
+    # App Info
+    st.subheader("ℹ️ App Info")
+
+    info_data = {
+        "Version": "1.0.0",
+        "Phase": "5 & 6 Complete",
+        "Features": "Calculator, Trade Management, Partial Sales, Analytics, Export/Import",
+        "Supported Products": "Spot, CFD Long/Short, Knockout Long/Short"
+    }
+
+    for key, value in info_data.items():
+        st.text(f"{key}: {value}")
+
+
+# ============================================================================
 # FOOTER
 # ============================================================================
 
 st.markdown("---")
-st.markdown("*🎯 Unified Trading Risk Management v1.0 - Phase 3 & 4 Complete*")
+st.markdown("*🎯 Unified Trading Risk Management v1.0 - Phase 5 & 6 Complete*")

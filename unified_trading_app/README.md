@@ -58,6 +58,23 @@ Komplette Trading Risk Management Lösung - vereint alle Tools in einer Anwendun
   - Filter nach Produkt-Typ
   - Vollständige Trade-Details
 
+### Phase 5: Export & Settings (✅ Komplett)
+- ✅ **Tab 6: Settings & Export**
+  - CSV Export (All Trades, Performance, Partial Sales)
+  - JSON Backup/Restore (vollständig mit Teilverkäufen)
+  - Import/Restore Funktion
+  - Data Management (Clear All Data)
+  - Portfolio Settings
+  - App Info
+
+### Phase 6: Enhanced Charts (✅ Komplett)
+- ✅ **Plotly Interactive Charts**
+  - R-Multiple Distribution (Bar Chart)
+  - Product Distribution (Pie Chart)
+  - Win Rate Gauge
+  - Cumulative P&L Line Chart
+  - Teilverkäufe Analytics Charts
+
 ## 🚀 Installation
 
 ```bash
@@ -138,11 +155,13 @@ python3 unified_trading_app/tests/test_phase1.py
 - [x] Phase 2: Basic UI (Tab 1 & 2)
 - [x] Phase 3: Teilverkäufe (Tab 2 erweitert + Tab 3)
 - [x] Phase 4: Performance & Historie (Tab 4 & 5)
+- [x] Phase 5: Export & Settings (CSV/JSON, Backup/Restore)
+- [x] Phase 6: Enhanced Charts mit Plotly (Interactive Visualisierung)
 
 ### 🔜 Optional Next Steps
-- [ ] Phase 5: Export & Settings (CSV/JSON, Backup/Restore)
-- [ ] Phase 6: Charts mit Plotly (Performance-Visualisierung)
 - [ ] Advanced Features: Auto-Trailing Stop, Notifications
+- [ ] Real-time Market Data Integration
+- [ ] Risk Management Alerts
 
 ## 💡 Highlights
 
